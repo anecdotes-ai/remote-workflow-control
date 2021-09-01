@@ -1,0 +1,243 @@
+###################
+# Basic functions #
+###################
+
+function die() {
+    local rc=$1
+    shift
+    local msg=$@
+    local death_type=OK
+    if [[ $rc -ne 0 ]] ; then
+        local death_type="ERROR"
+    fi
+    echo -e "[$PROG][$death_type]: ${msg}" >&2
+    exit $rc
+}
+
+function say() {
+    local header=$1
+    shift
+    local msg=$@
+    echo -e "[$PROG][$header]: $msg"
+}
+
+function cmd_exists() {
+    local cmd=$1
+    command -v $cmd &> /dev/null
+}
+
+function file_is_empty() {
+    local _file=$1
+    ! test -s $_file
+}
+
+function is_int() {
+    local int=$1
+    [[ $int =~ ^[[:digit:]]+$ ]]
+}
+
+function verify_option_was_provided() {
+    local varname=$1
+    local option_name=$2
+    check_variable_or_die $varname "option $option_name is required"
+}
+
+function check_required_binaries() {
+    local required_binaries=$@
+    local missing_binaries=""
+    for cmd in $required_binaries ; do
+        if ! cmd_exists $cmd ; then
+            missing_binaries+="$cmd "
+        fi
+    done
+    if [[ -n $missing_binaries ]] ; then
+        printf "Command not found: %s\n" $missing_binaries
+        return 1
+    fi
+    return 0
+}
+
+function check_variable_or_die() {
+    local varname=$1
+    local error_msg=${2:-"variable $varname is undefined"}
+    if [[ -z ${!varname} ]] ; then
+        die 1 "$error_msg"
+    fi
+    return 0
+}
+
+function convert_seconds_to_time() {
+    local time_in_seconds=$1
+    local hours=$((time_in_seconds / 3600 ))
+    local mins=$(((time_in_seconds % 3600) / 60))
+    local secs=$((time_in_seconds % 60))
+    test $hours -gt 0 || local hours=00
+    test $mins -gt 0 || local mins=00
+    [[ $mins =~ ^[0-9]{1}$ ]] && local mins=0${mins}
+    [[ $secs =~ ^[0-9]{1}$ ]] && local secs=0${secs}
+    echo "${hours}h:${mins}m:${secs}s"
+}
+
+#################################
+# workflow-control.sh functions #
+#################################
+
+function generate_uuid() {
+    openssl rand -hex 12
+}
+
+function extract_artifact_id() { 
+    local artifact_name=$1
+    jq -M -r '.artifacts[] | select(.name == "'"$artifact_name"'") | .id'
+}
+
+function curl_github_api() {
+    local url=$1
+    shift
+    local curl_opts=$@
+    curl --silent --request GET \
+        -H "Authorization: Basic $AUTH_TOKEN" \
+        -H "Accept: application/vnd.github.v3+json" \
+        $url $curl_opts
+}
+
+function trigger_workflow() {
+    local github_url=$1
+    local workflow_branch=$2
+    shift 2
+    local workflow_inputs=$@
+    local json_data=$(create_json_data $workflow_branch $workflow_inputs)
+
+    local curl_rc=$( \
+        curl --silent \
+            --request POST \
+            --output /dev/stderr \
+            --write-out "%{http_code}" \
+            -H "Authorization: Basic $AUTH_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            $github_url --data "$json_data")
+
+    say DEBUG "POST request JSON data: $json_data"
+
+    if test $curl_rc -eq 204 ; then
+        say INFO "Successfully triggered: $github_url"
+        return 0
+    fi
+
+    die 1 "failed to trigger: $github_url, curl exit code: $curl_rc"
+}
+
+function time_in_epoch() {
+    date +%s
+}
+
+function create_json_data() {
+    local workflow_branch=$1
+    shift
+    local workflow_inputs=$@
+    if [[ -n $workflow_inputs ]] ; then
+        local input_prefix='"inputs": '
+        local finalized_inputs=""
+        for input in $workflow_inputs ; do
+            local var=${input%%=*}
+            local value=${input##*=}
+            finalized_inputs=''"$finalized_inputs"' "'"$var"'": "'"$value"'",'
+        done
+        # Remove the last comma from our inputs json data;
+        finalized_inputs=$(echo $finalized_inputs | sed 's/,$//')
+        echo '{"ref": "'"$workflow_branch"'", '"$input_prefix"'{'"$finalized_inputs"'}}'
+    else
+        echo '{"ref": "'"$workflow_branch"'"}'
+    fi
+}
+
+function conclude_death() {
+    local job_exit_conclusion=$1
+    if [[ $job_exit_conclusion == "success" ]] ; then
+        die 0 "action conclusion: $job_exit_conclusion"
+    fi
+    die 1 "action conclusion: $job_exit_conclusion"
+}
+
+function wait_and_report_progress() {
+    local time_remaining=$1
+    # Don't clog the screen with endless messages, only report of status every once in a while;
+    if [[ $(( time_remaining % 2)) -eq 0 ]] ; then
+        echo "Still waiting.. timeout countdown: [$(convert_seconds_to_time $time_remaining)]"
+    fi
+    sleep 3
+}
+
+function extract_workflow_base_url() {
+    local full_workflow_yaml_url=$1
+    awk -F'/actions/' '{ print $1}'<<<$full_workflow_yaml_url
+}
+
+function wait_for_status() {
+    local artifact_uuid=$1
+    local workflow_base_url=$2
+    local wait_timeout_in_minutes=$3
+    local wait_timeout_in_seconds=$((wait_timeout_in_minutes * 60))
+
+    local artifacts_url="$workflow_base_url/actions/artifacts"
+
+    say INFO "Waiting for $wait_timeout_in_minutes minute(s) to obtain artifact ID"
+    local start_time=$(time_in_epoch)
+    local time_remaining=$wait_timeout_in_seconds
+    until [[ -n $artifact_id ]] ; do
+        if [[ $time_remaining -le 0 ]] ; then
+            die 1 "timeout exceeded while waiting for artifact after $wait_timeout_in_minutes minutes"
+        fi
+
+        artifact_id=$(curl_github_api $artifacts_url | extract_artifact_id $artifact_uuid)
+
+        local now_time=$(time_in_epoch)
+        local elapsed_seconds=$(( now_time - start_time ))
+        local time_remaining=$(( wait_timeout_in_seconds - elapsed_seconds ))
+
+        wait_and_report_progress $time_remaining
+    done
+
+    say INFO "Found artifact ID: $artifact_id, gathering job exit status"
+
+    local run_url=$(curl_github_api $artifacts_url/$artifact_id/zip "--location --output -" | zcat)
+    local conclusion=$(curl_github_api $run_url | jq '.conclusion' -r -M)
+
+    # Delete the artifact once conclusion is gathered;
+    curl_github_api $artifacts_url/$artifact_id "--request DELETE"
+
+    # Exit according to conclusion;
+    conclude_death $conclusion
+}
+
+function usage() { 
+    /bin/echo " 
+Description: $PROG is used to trigger a remote Github workflow from within a workflow and monitor its status for success/failure; 
+ 
+Usage: ${PROG} OPTIONS 
+ 
+Mandatory Options: 
+
+    -u, --workflow-url <url>            when we trigger a workflow, the full path to the workflow's yaml file should
+                                        be provided; if we wait for status, then the base path of the workflow is provided;
+
+    -a, --auth-token <token>            provide a Github authentication token in the format of username:token;
+                                        $PROG would 'base64' it and pass it on in the request header;
+
+    -r, --workflow-branch <branch>      when triggering a workflow, this option is mandatory as it instructs
+                                        Github to run the workflow from the specified branch;
+
+Optional:
+
+    -i, --workflow-inputs <var=value>   if the triggered workflow accepts inputs, you can specify them via this option;
+                                        NOTE: for more than one 'var=value' input pair, enclose it all with double quotes; 
+
+    -t, --wait-timeout-minutes <int>    how long should $PROG wait when checking the status of a job before it times out;
+                                        if unspecified, defaults to $DEFAULT_WAIT_TIMEOUT_MINUTES minutes;
+
+Examples:
+
+    # For detailed, practical examples, please refer to:
+    https://anecdotes.atlassian.net/wiki/spaces/ANECDOTES/pages/231669928/Trigger+a+Github+Workflow+From+Another+Workflow+Guide
+" >&2 
+} 

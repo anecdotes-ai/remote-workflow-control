@@ -1,0 +1,31 @@
+name: Trigger Remote Workflow And Track Its Status
+description: 'triggers a remote workflow and waits for its exit status'
+inputs:
+  github-auth-token:
+    description: 'the github authentication token to use for POST/GET requests on Github'
+    required: true
+  workflow-yaml-url:
+    description: 'the full path to the workflow yaml url, usually ends with "dispatch"'
+    required: true
+  workflow-branch:
+    description: 'the branch from which the triggered workflow would be executed'
+    required: true
+  workflow-inputs:
+    description: 'additional space-delimited workflow inputs in the var=value format'
+    required: false
+    default: 'none'
+  wait-timeout-in-minutes:
+    description: 'how long we wait for the triggered workflow to complete'
+    required: 'false'
+    default: '5'
+runs:
+  using: "composite"
+  steps:
+    - run: |
+        ${{ github.action_path }}/remote-workflow-control.sh \
+        --workflow-url ${{ inputs.workflow-yaml-url }} \
+        --auth-token ${{ inputs.github-auth-token }} \
+        --workflow-branch ${{ inputs.workflow-branch }} \
+        --wait-timeout-minutes ${{ inputs.wait-timeout-in-minutes }} \
+        --workflow-inputs "${{ inputs.workflow-inputs }}"
+      shell: bash
