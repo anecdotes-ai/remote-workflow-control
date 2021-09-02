@@ -168,18 +168,11 @@ function wait_and_report_progress() {
     sleep 3
 }
 
-function extract_workflow_base_url() {
-    local full_workflow_yaml_url=$1
-    awk -F'/actions/' '{ print $1}'<<<$full_workflow_yaml_url
-}
-
 function wait_for_status() {
     local artifact_uuid=$1
-    local workflow_base_url=$2
+    local artifacts_url=$2
     local wait_timeout_in_minutes=$3
     local wait_timeout_in_seconds=$((wait_timeout_in_minutes * 60))
-
-    local artifacts_url="$workflow_base_url/actions/artifacts"
 
     say INFO "Waiting for $wait_timeout_in_minutes minute(s) to obtain artifact ID"
     local start_time=$(time_in_epoch)
@@ -218,14 +211,14 @@ Usage: ${PROG} OPTIONS
  
 Mandatory Options: 
 
-    -u, --workflow-url <url>            when we trigger a workflow, the full path to the workflow's yaml file should
-                                        be provided; if we wait for status, then the base path of the workflow is provided;
+    -o, --workflow-org  <str>           the workflow's organization/user-name on Github;
+    -r, --workflow-repo <str>           the workflow's repository name on Github;
+    -y, --workflow-yaml <*.(yaml|yml)>  the workflows's actual yaml file that you wish to trigger;
+    -r, --workflow-branch <branch>      when triggering a workflow, this option is mandatory as it instructs
+                                        Github to run the workflow from the specified branch;
 
     -a, --auth-token <token>            provide a Github authentication token in the format of username:token;
                                         $PROG would 'base64' it and pass it on in the request header;
-
-    -r, --workflow-branch <branch>      when triggering a workflow, this option is mandatory as it instructs
-                                        Github to run the workflow from the specified branch;
 
 Optional:
 
