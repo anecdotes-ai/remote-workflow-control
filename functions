@@ -174,6 +174,10 @@ function wait_for_status() {
     local wait_timeout_in_minutes=$3
     local wait_timeout_in_seconds=$((wait_timeout_in_minutes * 60))
 
+    if [[ $wait_timeout_in_minutes -eq 0 ]] ; then
+        die 0 "Not waiting for triggered job to finish since 'wait-timeout-in-minutes' is set to $wait_timeout_in_minutes, artifact UUID: $artifact_uuid"
+    fi
+
     say INFO "Waiting for $wait_timeout_in_minutes minute(s) to obtain artifact ID"
     local start_time=$(time_in_epoch)
     local time_remaining=$wait_timeout_in_seconds
@@ -227,6 +231,8 @@ Optional:
 
     -t, --wait-timeout-minutes <int>    how long should $PROG wait when checking the status of a job before it times out;
                                         if unspecified, defaults to $DEFAULT_WAIT_TIMEOUT_MINUTES minutes;
+                                        NOTE: if '0' is specified, $PROG will NOT wait for the triggered job to finish,
+                                        but would rather trigger it and die accordingly;
 
 Examples:
 
