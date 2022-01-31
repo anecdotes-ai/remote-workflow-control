@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+set -x
 # Copyright (C) 2021 anecdotes.ai;
 # Author:     Ido Ozeri <ido@anecdotes.ai>
 # Maintainer: Ido Ozeri <ido@anecdotes.ai>
