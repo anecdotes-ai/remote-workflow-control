@@ -62,7 +62,7 @@ verify_option_was_provided WORKFLOW_BRANCH "--workflow-branch"
 # value of inputs to 'none' and nullifying it here below if it is not provided by the user;
 
 #jq '.module.data.item_i77f664a2.fields += {"operation":"delete"}'
-mandatory_inputs='{"ref": "'"'$WORKFLOW_BRANCH'"'", "inputs": {"trigger_uuid": "'"'$TRIGGER_UUID_VALUE'"'"}}'
+mandatory_inputs="{\"ref\": \"$WORKFLOW_BRANCH\", \"inputs\": {\"trigger_uuid\": \"$TRIGGER_UUID_VALUE\"}}"
 #all_inputs=$(jq -c '.inputs += '"$WORKFLOW_INPUTS"''<<<"$mandatory_inputs")
 
 #curl_it() {
