@@ -106,18 +106,26 @@ function trigger_workflow() {
     local workflow_branch=$2
     shift 2
     local workflow_inputs=$@
-    local json_data=$(create_json_data $workflow_branch $workflow_inputs)
+    #local json_data=$(create_json_data $workflow_branch $workflow_inputs)
+    
+        echo curl --silent \
+             --request POST \
+             --output /dev/stderr \
+             --write-out "%{http_code}" \
+             -H "Authorization: Basic $AUTH_TOKEN" \
+             -H "Accept: application/vnd.github.v3+json" \
+             $github_url --data ''"$workflow_inputs"''
 
     local curl_rc=$( \
         curl --silent \
-            --request POST \
-            --output /dev/stderr \
-            --write-out "%{http_code}" \
-            -H "Authorization: Basic $AUTH_TOKEN" \
-            -H "Accept: application/vnd.github.v3+json" \
-            $github_url --data "$json_data")
-
-    say DEBUG "POST request JSON data: $json_data"
+             --request POST \
+             --output /dev/stderr \
+             --write-out "%{http_code}" \
+             -H "Authorization: Basic $AUTH_TOKEN" \
+             -H "Accept: application/vnd.github.v3+json" \
+             $github_url --data "$workflow_inputs")
+    
+    say DEBUG "POST request JSON data: $workflow_inputs"
 
     if test $curl_rc -eq 204 ; then
         say INFO "Successfully triggered: $github_url"
@@ -218,7 +226,7 @@ Mandatory Options:
     -o, --workflow-org  <str>           the workflow's organization/user-name on Github;
     -r, --workflow-repo <str>           the workflow's repository name on Github;
     -y, --workflow-yaml <*.(yaml|yml)>  the workflows's actual yaml file that you wish to trigger;
-    -r, --workflow-branch <branch>      when triggering a workflow, this option is mandatory as it instructs
+    -b, --workflow-branch <branch>      when triggering a workflow, this option is mandatory as it instructs
                                         Github to run the workflow from the specified branch;
 
     -a, --auth-token <token>            provide a Github authentication token in the format of username:token;

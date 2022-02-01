@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 
-set -x
 # Copyright (C) 2021 anecdotes.ai;
 # Author:     Ido Ozeri <ido@anecdotes.ai>
 # Maintainer: Ido Ozeri <ido@anecdotes.ai>
@@ -62,9 +61,26 @@ verify_option_was_provided WORKFLOW_BRANCH "--workflow-branch"
 # that are passed to 'action.yaml', therefore I'm setting the default
 # value of inputs to 'none' and nullifying it here below if it is not provided by the user;
 
+#jq '.module.data.item_i77f664a2.fields += {"operation":"delete"}'
+mandatory_inputs='{"ref": "'"'$WORKFLOW_BRANCH'"'", "inputs": {"trigger_uuid": "'"'$TRIGGER_UUID_VALUE'"'"}}'
+#all_inputs=$(jq -c '.inputs += '"$WORKFLOW_INPUTS"''<<<"$mandatory_inputs")
+
+#curl_it() {
+#   local json_data=$@
+#   curl -X POST --data ''"$json_data"'' https://httpbin.org/post
+#   exit 0
+#}
+
 if [[ $WORKFLOW_INPUTS == "none" ]] ; then
+    curl_post_data="{\"ref\": \"$WORKFLOW_BRANCH\", \"inputs\": {\"trigger_uuid\": \"$TRIGGER_UUID_VALUE\"}}"
     declare WORKFLOW_INPUTS=""
+else
+    curl_post_data=$(jq -c '.inputs += '"$WORKFLOW_INPUTS"''<<<"$mandatory_inputs")
 fi
+
+#curl_it "$all_inputs"
+#curl_it ''"$WORKFLOW_INPUTS"''
+#exit 0
 
 # Building the relevant URLs based on user input;
 WORKFLOW_BASE_URL="$GITHUB_API_BASEURL/$WORKFLOW_ORG/$WORKFLOW_REPO/actions"
@@ -72,7 +88,7 @@ WORKFLOW_ARTIFACTS_URL="$WORKFLOW_BASE_URL/artifacts"
 WORKFLOW_DISPATCH_URL="$WORKFLOW_BASE_URL/workflows/$WORKFLOW_YAML/dispatches"
 
 trigger_workflow $WORKFLOW_DISPATCH_URL $WORKFLOW_BRANCH \
-    $TRIGGER_UUID_INPUT_VAR=$TRIGGER_UUID_VALUE $WORKFLOW_INPUTS
+    "$curl_post_data"
 
 wait_for_status $TRIGGER_UUID_VALUE $WORKFLOW_ARTIFACTS_URL $WAIT_TIMEOUT_MINUTES
 #END
