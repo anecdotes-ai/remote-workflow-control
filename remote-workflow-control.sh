@@ -61,8 +61,13 @@ verify_option_was_provided WORKFLOW_BRANCH "--workflow-branch"
 # that are passed to 'action.yaml', therefore I'm setting the default
 # value of inputs to 'none' and nullifying it here below if it is not provided by the user;
 
+mandatory_inputs="{\"ref\": \"$WORKFLOW_BRANCH\", \"inputs\": {\"trigger_uuid\": \"$TRIGGER_UUID_VALUE\"}}"
+
 if [[ $WORKFLOW_INPUTS == "none" ]] ; then
+    curl_post_data="{\"ref\": \"$WORKFLOW_BRANCH\", \"inputs\": {\"trigger_uuid\": \"$TRIGGER_UUID_VALUE\"}}"
     declare WORKFLOW_INPUTS=""
+else
+    curl_post_data=$(jq -c '.inputs += '"$WORKFLOW_INPUTS"''<<<"$mandatory_inputs")
 fi
 
 # Building the relevant URLs based on user input;
@@ -71,7 +76,7 @@ WORKFLOW_ARTIFACTS_URL="$WORKFLOW_BASE_URL/artifacts"
 WORKFLOW_DISPATCH_URL="$WORKFLOW_BASE_URL/workflows/$WORKFLOW_YAML/dispatches"
 
 trigger_workflow $WORKFLOW_DISPATCH_URL $WORKFLOW_BRANCH \
-    $TRIGGER_UUID_INPUT_VAR=$TRIGGER_UUID_VALUE $WORKFLOW_INPUTS
+    "$curl_post_data"
 
 wait_for_status $TRIGGER_UUID_VALUE $WORKFLOW_ARTIFACTS_URL $WAIT_TIMEOUT_MINUTES
 #END

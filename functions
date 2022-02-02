@@ -106,18 +106,17 @@ function trigger_workflow() {
     local workflow_branch=$2
     shift 2
     local workflow_inputs=$@
-    local json_data=$(create_json_data $workflow_branch $workflow_inputs)
 
     local curl_rc=$( \
         curl --silent \
-            --request POST \
-            --output /dev/stderr \
-            --write-out "%{http_code}" \
-            -H "Authorization: Basic $AUTH_TOKEN" \
-            -H "Accept: application/vnd.github.v3+json" \
-            $github_url --data "$json_data")
-
-    say DEBUG "POST request JSON data: $json_data"
+             --request POST \
+             --output /dev/stderr \
+             --write-out "%{http_code}" \
+             -H "Authorization: Basic $AUTH_TOKEN" \
+             -H "Accept: application/vnd.github.v3+json" \
+             $github_url --data "$workflow_inputs")
+    
+    say DEBUG "POST request JSON data: $workflow_inputs"
 
     if test $curl_rc -eq 204 ; then
         say INFO "Successfully triggered: $github_url"
@@ -129,26 +128,6 @@ function trigger_workflow() {
 
 function time_in_epoch() {
     date +%s
-}
-
-function create_json_data() {
-    local workflow_branch=$1
-    shift
-    local workflow_inputs=$@
-    if [[ -n $workflow_inputs ]] ; then
-        local input_prefix='"inputs": '
-        local finalized_inputs=""
-        for input in $workflow_inputs ; do
-            local var=${input%%=*}
-            local value=${input##*=}
-            finalized_inputs=''"$finalized_inputs"' "'"$var"'": "'"$value"'",'
-        done
-        # Remove the last comma from our inputs json data;
-        finalized_inputs=$(echo $finalized_inputs | sed 's/,$//')
-        echo '{"ref": "'"$workflow_branch"'", '"$input_prefix"'{'"$finalized_inputs"'}}'
-    else
-        echo '{"ref": "'"$workflow_branch"'"}'
-    fi
 }
 
 function conclude_death() {
@@ -218,7 +197,7 @@ Mandatory Options:
     -o, --workflow-org  <str>           the workflow's organization/user-name on Github;
     -r, --workflow-repo <str>           the workflow's repository name on Github;
     -y, --workflow-yaml <*.(yaml|yml)>  the workflows's actual yaml file that you wish to trigger;
-    -r, --workflow-branch <branch>      when triggering a workflow, this option is mandatory as it instructs
+    -b, --workflow-branch <branch>      when triggering a workflow, this option is mandatory as it instructs
                                         Github to run the workflow from the specified branch;
 
     -a, --auth-token <token>            provide a Github authentication token in the format of username:token;
@@ -227,7 +206,7 @@ Mandatory Options:
 Optional:
 
     -i, --workflow-inputs <var=value>   if the triggered workflow accepts inputs, you can specify them via this option;
-                                        NOTE: for more than one 'var=value' input pair, enclose it all with double quotes; 
+                                        NOTE: this option accepts JSON type input only where double quotes are escaped!
 
     -t, --wait-timeout-minutes <int>    how long should $PROG wait when checking the status of a job before it times out;
                                         if unspecified, defaults to $DEFAULT_WAIT_TIMEOUT_MINUTES minutes;
