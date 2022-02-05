@@ -14,6 +14,7 @@ SCRIPT_FULLPATH=$(cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd)
 # Load everything we need;
 source $SCRIPT_FULLPATH/functions || exit 1
 source $SCRIPT_FULLPATH/variables || exit 1
+source $SCRIPT_FULLPATH/table_functions || exit 1
 
 # Process options
 SHORT_OPTS="ha:b:i:w:o:r:y:"
@@ -78,5 +79,10 @@ WORKFLOW_DISPATCH_URL="$WORKFLOW_BASE_URL/workflows/$WORKFLOW_YAML/dispatches"
 trigger_workflow $WORKFLOW_DISPATCH_URL $WORKFLOW_BRANCH \
     "$curl_post_data"
 
-wait_for_status $TRIGGER_UUID_VALUE $WORKFLOW_ARTIFACTS_URL $WAIT_TIMEOUT_MINUTES
+wait_for_status \
+    $TRIGGER_UUID_VALUE \
+    $WORKFLOW_ARTIFACTS_URL \
+    $WAIT_TIMEOUT_MINUTES \
+    $WORKFLOW_BASE_URL
+
 #END
