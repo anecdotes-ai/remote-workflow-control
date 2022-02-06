@@ -178,10 +178,9 @@ function calc_remaining_time() {
 
 function wait_for_status() {
     local artifact_uuid=$1
-    local artifacts_url=$2
+    local workflow_base_url=$2
     local wait_timeout_in_minutes=$3
     local wait_timeout_in_seconds=$((wait_timeout_in_minutes * 60))
-    local workflow_base_url=$4
 
     if [[ $wait_timeout_in_minutes -eq 0 ]] ; then
         die 0 "Not waiting for triggered job to finish since 'wait-timeout-in-minutes' is set to $wait_timeout_in_minutes, artifact UUID: $artifact_uuid"
@@ -194,24 +193,20 @@ function wait_for_status() {
         die 1 "timeout exceeded while waiting for artifact after $wait_timeout_in_minutes minutes"
     fi
 
-    # Give some time for the job to get created;
-    # sleep 10
-
-    # Loop over all URLs and check for Job ID we triggered earlier;
-    local all_job_urls=$(get_jobs_urls "$workflow_base_url/runs?created=>$(date_iso8601)")
-
     until [[ -n $job_id ]]; do
+        # Loop over all URLs and check for Job ID we triggered earlier;
+        local all_job_urls=$(get_jobs_urls "$workflow_base_url/runs?created=>$(date_iso8601)")
         for url in $all_job_urls ; do
             local job_id=$(curl_github_api $url | jq '.jobs[] | select(.steps[].name == "'"$artifact_uuid"'") | .id' 2> /dev/null)
             if [[ -n $job_id ]] ; then
-                break 2
+                break
             fi
         done
     done
     
     say INFO "Found job ID of triggered workflow: $job_id, will be used to query for job status"
 
-    say INFO "Starting countdown of $wait_timeout_in_minutes minute(s) while waitinf for job \"$job_id\" to finish"
+    say INFO "Starting countdown of $wait_timeout_in_minutes minute(s) while waiting for job \"$job_id\" to finish"
     local start_time=$(time_in_epoch)
     local time_remaining=$wait_timeout_in_seconds
     local job_datafile_json=$(mktemp)
@@ -226,7 +221,7 @@ function wait_for_status() {
             local job_status=$(parse_json_data "job_status" $job_datafile_json)
 
             # Exit according to conclusion;
-            conclude_death $conclusion
+            conclude_death $job_conclusion $job_status
              
         fi
         
@@ -236,16 +231,27 @@ function wait_for_status() {
         say INFO "Gathering job's progress .."
         echo "Step, Status, Conclusion" > $steps_tmpfile
 
+        # Seperator must be a newline char since $all_steps
+        # is a list of strings with spaces;
+
         oIFS=$IFS
         IFS=$'\n'
 
         for step in $all_steps ; do
+
+            # No need to print the step we named after
+            # the unique ID since it's for internal tracking 
+            # purposes only;
+
             if [[ $step == \"$artifact_uuid\" ]] ; then
                 continue
             fi
+
             step_status=$(parse_json_data "step_status" $job_datafile_json "$step")
             step_conclusion=$(parse_json_data "step_conclusion" $job_datafile_json "$step")
+
             if [[ $step_conclusion == "null" ]] ; then
+                # Do not display null values in table;
                 step_conclusion=""
             fi
             echo "$step", "$step_status", "$step_conclusion" | tee -a $steps_tmpfile 1> /dev/null
@@ -256,10 +262,6 @@ function wait_for_status() {
         printTable , "$(cat $steps_tmpfile)"
 
         rm -f $steps_tmpfile
-
-        #local now_time=$(time_in_epoch)
-        #local elapsed_seconds=$(( now_time - start_time ))
-        #local time_remaining=$(( wait_timeout_in_seconds - elapsed_seconds ))
 
         wait_and_report_progress $(calc_remaining_time $start_time $wait_timeout_in_seconds)
     done
@@ -284,8 +286,9 @@ Mandatory Options:
 
 Optional:
 
-    -i, --workflow-inputs <var=value>   if the triggered workflow accepts inputs, you can specify them via this option;
+    -i, --workflow-inputs <json>        if the triggered workflow accepts inputs, you can specify them via this option;
                                         NOTE: this option accepts JSON type input only where double quotes are escaped!
+                                        see examples in the Github repo link below;
 
     -w, --wait-timeout-minutes <int>    how long should $PROG wait when checking the status of a job before it times out;
                                         if unspecified, defaults to $DEFAULT_WAIT_TIMEOUT_MINUTES minutes;
@@ -295,6 +298,6 @@ Optional:
 Examples:
 
     # For detailed, practical examples, please refer to:
-    https://anecdotes.atlassian.net/wiki/spaces/ANECDOTES/pages/231669928/Trigger+a+Github+Workflow+From+Another+Workflow+Guide
+    https://github.com/anecdotes-ai/remote-workflow-control
 " >&2 
 } 

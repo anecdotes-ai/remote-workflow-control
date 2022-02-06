@@ -64,25 +64,25 @@ verify_option_was_provided WORKFLOW_BRANCH "--workflow-branch"
 
 mandatory_inputs="{\"ref\": \"$WORKFLOW_BRANCH\", \"inputs\": {\"trigger_uuid\": \"$TRIGGER_UUID_VALUE\"}}"
 
-if [[ $WORKFLOW_INPUTS == "none" ]] ; then
-    curl_post_data="{\"ref\": \"$WORKFLOW_BRANCH\", \"inputs\": {\"trigger_uuid\": \"$TRIGGER_UUID_VALUE\"}}"
-    declare WORKFLOW_INPUTS=""
+if [[ $WORKFLOW_INPUTS == "none" || -z $WORKFLOW_INPUTS ]] ; then
+    curl_post_input_data="{\"ref\": \"$WORKFLOW_BRANCH\", \"inputs\": {\"trigger_uuid\": \"$TRIGGER_UUID_VALUE\"}}"
+    #declare WORKFLOW_INPUTS=""
 else
-    curl_post_data=$(jq -c '.inputs += '"$WORKFLOW_INPUTS"''<<<"$mandatory_inputs")
+    curl_post_input_data=$(jq -c '.inputs += '"$WORKFLOW_INPUTS"''<<<"$mandatory_inputs")
 fi
 
 # Building the relevant URLs based on user input;
 WORKFLOW_BASE_URL="$GITHUB_API_BASEURL/$WORKFLOW_ORG/$WORKFLOW_REPO/actions"
-WORKFLOW_ARTIFACTS_URL="$WORKFLOW_BASE_URL/artifacts"
 WORKFLOW_DISPATCH_URL="$WORKFLOW_BASE_URL/workflows/$WORKFLOW_YAML/dispatches"
 
-trigger_workflow $WORKFLOW_DISPATCH_URL $WORKFLOW_BRANCH \
-    "$curl_post_data"
+trigger_workflow \
+    $WORKFLOW_DISPATCH_URL \
+    $WORKFLOW_BRANCH \
+    "$curl_post_input_data"
 
 wait_for_status \
     $TRIGGER_UUID_VALUE \
-    $WORKFLOW_ARTIFACTS_URL \
-    $WAIT_TIMEOUT_MINUTES \
-    $WORKFLOW_BASE_URL
+    $WORKFLOW_BASE_URL \
+    $WAIT_TIMEOUT_MINUTES
 
 #END
