@@ -56,7 +56,7 @@ As you can see, we define an optional ‘trigger_uuid’ input for this workflow
               workflow-repo: 'api'
               workflow-yaml: 'deploy.yaml'
               workflow-branch: 'master'
-              workflow-inputs: 'deploy_frontend=true debug_mode=false'
+              workflow-inputs: '{\"deploy_frontend\": true \"debug_mode\": false}'
               wait-timeout-in-minutes: '10'
               
           - name: Test Deployment
