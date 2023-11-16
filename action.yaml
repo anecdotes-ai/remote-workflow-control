@@ -1,5 +1,5 @@
-name: Trigger Remote Workflow And Track Its Status
-description: 'triggers a remote workflow and waits for its exit status'
+name: Await Remote Workflow
+description: 'Triggers a remote workflow and waits for it to complete'
 inputs:
   workflow-org:
     description: 'the worklflow"s organization/username on Github'
@@ -24,12 +24,12 @@ inputs:
   wait-timeout-in-minutes:
     description: 'how long we wait for the triggered workflow to complete'
     required: 'false'
-    default: '5'
+    default: '10'
 runs:
   using: "composite"
   steps:
     - run: |
-        ${{ github.action_path }}/remote-workflow-control.sh \
+        ${{ github.action_path }}/await-remote-workflow.sh \
         --workflow-org ${{ inputs.workflow-org }} \
         --workflow-repo ${{ inputs.workflow-repo }} \
         --workflow-yaml ${{ inputs.workflow-yaml }} \

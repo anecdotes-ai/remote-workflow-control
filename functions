@@ -112,7 +112,7 @@ function trigger_workflow() {
              -H "Authorization: Basic $AUTH_TOKEN" \
              -H "Accept: application/vnd.github.v3+json" \
              $github_url --data "$workflow_inputs")
-    
+
     say DEBUG "POST request JSON data: $workflow_inputs"
 
     if test $curl_rc -eq 204 ; then
@@ -203,7 +203,7 @@ function wait_for_status() {
             fi
         done
     done
-    
+
     say INFO "Found job ID of triggered workflow: $job_id, will be used to query for job status"
 
     say INFO "Starting countdown of $wait_timeout_in_minutes minute(s) while waiting for job \"$job_id\" to finish"
@@ -216,18 +216,18 @@ function wait_for_status() {
         curl_github_api "$workflow_base_url/jobs/$job_id" > $job_datafile_json
 
         local job_conclusion=$(parse_json_data "job_conclusion" $job_datafile_json)
-        
+
         if [[ -n $job_conclusion && $job_conclusion != "null" ]] ; then
             local job_status=$(parse_json_data "job_status" $job_datafile_json)
 
             # Exit according to conclusion;
             conclude_death $job_conclusion $job_status
-             
+
         fi
-        
+
         local all_steps="$(parse_json_data "names_of_steps" $job_datafile_json)"
         local steps_tmpfile=$(mktemp)
-        
+
         say INFO "Gathering job's progress .."
         echo "Step, Status, Conclusion" > $steps_tmpfile
 
@@ -240,7 +240,7 @@ function wait_for_status() {
         for step in $all_steps ; do
 
             # No need to print the step we named after
-            # the unique ID since it's for internal tracking 
+            # the unique ID since it's for internal tracking
             # purposes only;
 
             if [[ $step == \"$artifact_uuid\" ]] ; then
@@ -256,7 +256,7 @@ function wait_for_status() {
             fi
             echo "$step", "$step_status", "$step_conclusion" | tee -a $steps_tmpfile 1> /dev/null
         done
-        
+
         IFS=$oIFS
 
         printTable , "$(cat $steps_tmpfile)"
@@ -267,13 +267,13 @@ function wait_for_status() {
     done
 }
 
-function usage() { 
-    /bin/echo " 
-Description: $PROG is used to trigger a remote Github workflow from within a workflow and monitor its status for success/failure; 
- 
-Usage: ${PROG} OPTIONS 
- 
-Mandatory Options: 
+function usage() {
+    /bin/echo "
+Description: $PROG is used to trigger a remote Github workflow from within a workflow and monitor its status for success/failure;
+
+Usage: ${PROG} OPTIONS
+
+Mandatory Options:
 
     -o, --workflow-org  <str>           the workflow's organization/user-name on Github;
     -r, --workflow-repo <str>           the workflow's repository name on Github;
@@ -295,9 +295,5 @@ Optional:
                                         NOTE: if '0' is specified, $PROG will NOT wait for the triggered job to finish,
                                         but would rather trigger it and die accordingly;
 
-Examples:
-
-    # For detailed, practical examples, please refer to:
-    https://github.com/anecdotes-ai/remote-workflow-control
-" >&2 
-} 
+" >&2
+}
