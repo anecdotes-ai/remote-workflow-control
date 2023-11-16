@@ -1,4 +1,6 @@
 name: Await Remote Workflow
+icon: clock
+color: purple
 description: 'Triggers a remote workflow and waits for it to complete'
 inputs:
   workflow-org:
