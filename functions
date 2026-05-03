@@ -214,18 +214,25 @@ function wait_for_status() {
 
     # The artifact is uploaded as the last step of the triggered job, so the run's
     # conclusion may still be null for a few seconds after the artifact appears.
-    # Poll until the conclusion is set rather than checking once and failing on null.
-    local conclusion="null"
+    # Poll status until "completed" (which guarantees conclusion is populated)
+    # rather than checking once and failing on null.
+    local status=""
+    local conclusion=""
     local poll_start=$(time_in_epoch)
-    while [[ -z "$conclusion" || "$conclusion" == "null" ]] ; do
-        conclusion=$(curl_github_api $run_url | jq '.conclusion' -r -M)
-        if [[ -z "$conclusion" || "$conclusion" == "null" ]] ; then
-            local poll_elapsed=$(( $(time_in_epoch) - poll_start ))
-            if [[ $poll_elapsed -ge 60 ]] ; then
-                die 1 "timeout waiting for run conclusion after finding artifact (elapsed: ${poll_elapsed}s)"
-            fi
-            sleep 3
+    while [[ "$status" != "completed" ]] ; do
+        local run_json=$(curl_github_api $run_url)
+        status=$(echo "$run_json" | jq -r -M '.status')
+        conclusion=$(echo "$run_json" | jq -r -M '.conclusion')
+
+        if [[ "$status" == "completed" && -n "$conclusion" && "$conclusion" != "null" ]] ; then
+            break
         fi
+
+        local poll_elapsed=$(( $(time_in_epoch) - poll_start ))
+        if [[ $poll_elapsed -ge $CONCLUSION_POLL_TIMEOUT_SECONDS ]] ; then
+            die 1 "timeout waiting for run conclusion after finding artifact (elapsed: ${poll_elapsed}s, status: ${status:-unknown}, conclusion: ${conclusion:-unknown})"
+        fi
+        sleep $CONCLUSION_POLL_INTERVAL_SECONDS
     done
 
     # Delete the artifact once conclusion is gathered;

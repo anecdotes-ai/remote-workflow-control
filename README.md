@@ -68,4 +68,22 @@ So how does it actually work behind the scenes?
 
 When we triggered ‘workflow A’, we provided a unique ID as an input.Once this workflow has been concluded (whether failure/success), the unique ID is uploaded as a Github artifact file. The file contains the URL of ‘workflow A’ RUN_ID.  During the ‘wait for status’ phase, we periodically query Github’s API for the existence of an artifact named after our unique ID. Once found (which indicates ‘workflow A’ has been completed), we download the artifact file and read the URL that’s stored in it. We then query that URL to gather the workflow’s exit status. Once read - the artifact is deleted. 
 
-If you have any questions regarding this implementation, please don’t hesitate to ask. 
+If you have any questions regarding this implementation, please don’t hesitate to ask.
+
+## Releasing
+
+Consumers reference this action via the `latest` git tag. After merging a change to `master`, move the tag:
+
+```bash
+git fetch origin master
+git tag -f latest origin/master
+git push origin latest --force
+```
+
+## Configuration
+
+| Env var | Default | Description |
+|---|---|---|
+| `CONCLUSION_POLL_TIMEOUT_SECONDS` | `120` | Max seconds to wait for the triggered run's `conclusion` to flip from `null` after the artifact appears. The artifact is uploaded as the run's last step, so there is a brief window where the run is still `in_progress`. Bump this if you see "timeout waiting for run conclusion" errors. |
+| `CONCLUSION_POLL_INTERVAL_SECONDS` | `3` | How often to poll the run during that window. |
+
