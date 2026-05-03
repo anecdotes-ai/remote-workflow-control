@@ -88,6 +88,11 @@ function generate_uuid() {
     openssl rand -hex 12
 }
 
+function extract_artifact_id() {
+    local artifact_name=$1
+    jq -M -r '.artifacts[] | select(.name == "'"$artifact_name"'") | .id'
+}
+
 function curl_github_api() {
     local url=$1
     shift
@@ -178,7 +183,7 @@ function calc_remaining_time() {
 
 function wait_for_status() {
     local artifact_uuid=$1
-    local workflow_base_url=$2
+    local artifacts_url=$2
     local wait_timeout_in_minutes=$3
     local wait_timeout_in_seconds=$((wait_timeout_in_minutes * 60))
 
@@ -186,85 +191,48 @@ function wait_for_status() {
         die 0 "Not waiting for triggered job to finish since 'wait-timeout-in-minutes' is set to $wait_timeout_in_minutes, artifact UUID: $artifact_uuid"
     fi
 
-    local start_time=$(time_in_epoch)
-    local time_remaining=$(( wait_timeout_in_seconds - elapsed_seconds ))
-
-    if [[ $time_remaining -le 0 ]] ; then
-        die 1 "timeout exceeded while waiting for artifact after $wait_timeout_in_minutes minutes"
-    fi
-
-    until [[ -n $job_id ]]; do
-        # Loop over all URLs and check for Job ID we triggered earlier;
-        local all_job_urls=$(get_jobs_urls "$workflow_base_url/runs?created=>$(date_iso8601)")
-        for url in $all_job_urls ; do
-            local job_id=$(curl_github_api $url | jq '.jobs[] | select(.steps[].name == "'"$artifact_uuid"'") | .id' 2> /dev/null)
-            if [[ -n $job_id ]] ; then
-                break
-            fi
-        done
-    done
-    
-    say INFO "Found job ID of triggered workflow: $job_id, will be used to query for job status"
-
-    say INFO "Starting countdown of $wait_timeout_in_minutes minute(s) while waiting for job \"$job_id\" to finish"
+    say INFO "Waiting for $wait_timeout_in_minutes minute(s) to obtain artifact ID"
     local start_time=$(time_in_epoch)
     local time_remaining=$wait_timeout_in_seconds
-    local job_datafile_json=$(mktemp)
-
-    while [[ -z $job_conclusion || $job_conclusion == "null" ]] ; do
-
-        curl_github_api "$workflow_base_url/jobs/$job_id" > $job_datafile_json
-
-        local job_conclusion=$(parse_json_data "job_conclusion" $job_datafile_json)
-        
-        if [[ -n $job_conclusion && $job_conclusion != "null" ]] ; then
-            local job_status=$(parse_json_data "job_status" $job_datafile_json)
-
-            # Exit according to conclusion;
-            conclude_death $job_conclusion $job_status
-             
+    until [[ -n $artifact_id ]] ; do
+        if [[ $time_remaining -le 0 ]] ; then
+            die 1 "timeout exceeded while waiting for artifact after $wait_timeout_in_minutes minutes"
         fi
-        
-        local all_steps="$(parse_json_data "names_of_steps" $job_datafile_json)"
-        local steps_tmpfile=$(mktemp)
-        
-        say INFO "Gathering job's progress .."
-        echo "Step, Status, Conclusion" > $steps_tmpfile
 
-        # Seperator must be a newline char since $all_steps
-        # is a list of strings with spaces;
+        artifact_id=$(curl_github_api $artifacts_url | extract_artifact_id $artifact_uuid)
 
-        oIFS=$IFS
-        IFS=$'\n'
+        local now_time=$(time_in_epoch)
+        local elapsed_seconds=$(( now_time - start_time ))
+        local time_remaining=$(( wait_timeout_in_seconds - elapsed_seconds ))
 
-        for step in $all_steps ; do
-
-            # No need to print the step we named after
-            # the unique ID since it's for internal tracking 
-            # purposes only;
-
-            if [[ $step == \"$artifact_uuid\" ]] ; then
-                continue
-            fi
-
-            step_status=$(parse_json_data "step_status" $job_datafile_json "$step")
-            step_conclusion=$(parse_json_data "step_conclusion" $job_datafile_json "$step")
-
-            if [[ $step_conclusion == "null" ]] ; then
-                # Do not display null values in table;
-                step_conclusion=""
-            fi
-            echo "$step", "$step_status", "$step_conclusion" | tee -a $steps_tmpfile 1> /dev/null
-        done
-        
-        IFS=$oIFS
-
-        printTable , "$(cat $steps_tmpfile)"
-
-        rm -f $steps_tmpfile
-
-        wait_and_report_progress $(calc_remaining_time $start_time $wait_timeout_in_seconds)
+        wait_and_report_progress $time_remaining
     done
+
+    say INFO "Found artifact ID: $artifact_id, gathering job exit status"
+
+    local run_url=$(curl_github_api $artifacts_url/$artifact_id/zip "--location --output -" | zcat)
+
+    # The artifact is uploaded as the last step of the triggered job, so the run's
+    # conclusion may still be null for a few seconds after the artifact appears.
+    # Poll until the conclusion is set rather than checking once and failing on null.
+    local conclusion="null"
+    local poll_start=$(time_in_epoch)
+    while [[ -z "$conclusion" || "$conclusion" == "null" ]] ; do
+        conclusion=$(curl_github_api $run_url | jq '.conclusion' -r -M)
+        if [[ -z "$conclusion" || "$conclusion" == "null" ]] ; then
+            local poll_elapsed=$(( $(time_in_epoch) - poll_start ))
+            if [[ $poll_elapsed -ge 60 ]] ; then
+                die 1 "timeout waiting for run conclusion after finding artifact (elapsed: ${poll_elapsed}s)"
+            fi
+            sleep 3
+        fi
+    done
+
+    # Delete the artifact once conclusion is gathered;
+    curl_github_api $artifacts_url/$artifact_id "--request DELETE"
+
+    # Exit according to conclusion;
+    conclude_death $conclusion
 }
 
 function usage() { 
