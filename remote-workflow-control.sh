@@ -82,7 +82,7 @@ trigger_workflow \
 
 wait_for_status \
     $TRIGGER_UUID_VALUE \
-    $WORKFLOW_BASE_URL \
+    "$WORKFLOW_BASE_URL/artifacts" \
     $WAIT_TIMEOUT_MINUTES
 
 #END
