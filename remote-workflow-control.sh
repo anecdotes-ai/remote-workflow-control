@@ -31,7 +31,7 @@ eval set -- "$OPTS"
 while true ; do
     case "$1" in
         -h|--help) usage ; exit 0;;
-        -a|--auth-token) AUTH_TOKEN=$(echo -n $2 | base64) ; shift 2;;
+        -a|--auth-token) AUTH_TOKEN=$2 ; shift 2;;
         -o|--workflow-org) WORKFLOW_ORG=$2 ; shift 2;;
         -r|--workflow-repo) WORKFLOW_REPO=$2 ; shift 2;;
         -y|--workflow-yaml) WORKFLOW_YAML=$2 ; shift 2;;
