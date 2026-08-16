@@ -31,7 +31,11 @@ eval set -- "$OPTS"
 while true ; do
     case "$1" in
         -h|--help) usage ; exit 0;;
-        -a|--auth-token) AUTH_TOKEN=$(echo -n $2 | base64) ; shift 2;;
+        # -w 0: GNU base64 wraps at 76 chars by default; a token longer than 57
+        # bytes (e.g. a GitHub App installation token, unlike the 40-char classic
+        # PAT) gets a newline inside the Authorization header and curl aborts
+        # before sending anything (exit 43, http_code 000).
+        -a|--auth-token) AUTH_TOKEN=$(echo -n $2 | base64 -w 0) ; shift 2;;
         -o|--workflow-org) WORKFLOW_ORG=$2 ; shift 2;;
         -r|--workflow-repo) WORKFLOW_REPO=$2 ; shift 2;;
         -y|--workflow-yaml) WORKFLOW_YAML=$2 ; shift 2;;
